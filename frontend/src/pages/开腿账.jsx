@@ -8,7 +8,7 @@ export default function 开腿账() {
   return (
     <div>
       <h1 className="题">开腿账</h1>
-      <p className="述">进站尚未出站的在途开腿。出站成对后状态变已成对；超时或重复进站变已旁路。</p>
+      <p className="述">进站尚未出站的在途开腿。出站成对后状态变已成对；超时或重复进站变已旁路（保留口径：已旁路行仍在表内，可按开腿键查）。</p>
       <div className="行"><button className="次" onClick={刷}>刷新</button></div>
       {!行.length ? <div className="空态">暂无开腿。</div> : (
         <table>

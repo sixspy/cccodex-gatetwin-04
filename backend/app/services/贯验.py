@@ -1,5 +1,6 @@
 from app.db import 连接
 from app.seed import 此刻
+from app.modules import 缺腿超时旁路
 
 
 def 跑贯验() -> dict:
@@ -43,6 +44,52 @@ def 跑贯验() -> dict:
         if 开腿刷 != 开腿数:
             问题.append(f"已开腿刷卡{开腿刷} ≠ 在途开腿{开腿数}")
 
+        # 缺腿超时旁路链：保留口径下每条超时旁路都必须指向仍在开腿表的已旁路行，
+        # 且该腿不得落行程；反之每笔超时后出站都必须被拒绝成对。
+        超时旁 = list(
+            conn.execute(
+                "SELECT * FROM 旁路匣 WHERE 原因=? ORDER BY 编号",
+                (缺腿超时旁路.旁路原因,),
+            )
+        )
+        超时腿键 = set()
+        for b in 超时旁:
+            键 = b["开腿键"]
+            if not 键:
+                问题.append(f"缺腿超时旁路{b['编号']}未指向开腿键")
+                continue
+            超时腿键.add(键)
+            腿 = conn.execute("SELECT * FROM 开腿账 WHERE 开腿键=?", (键,)).fetchone()
+            if not 腿:
+                问题.append(f"缺腿超时旁路{b['编号']}指向的开腿行不存在（保留口径应保留）")
+                continue
+            if 腿["状态"] != "已旁路":
+                问题.append(f"开腿{键}状态{腿['状态']}，超时旁路未生效")
+            if 行程行 := conn.execute(
+                "SELECT 行程键 FROM 行程账 WHERE 进站事件编号=? LIMIT 1",
+                (腿["进站事件编号"],),
+            ).fetchone():
+                问题.append(f"开腿{键}超时旁路后仍落行程{行程行['行程键']}")
+
+        追出旁 = list(
+            conn.execute(
+                "SELECT * FROM 旁路匣 WHERE 原因=? ORDER BY 编号",
+                (缺腿超时旁路.追出原因,),
+            )
+        )
+        for b in 追出旁:
+            if not b["开腿键"] or b["开腿键"] not in 超时腿键:
+                问题.append(f"超时后出站旁路{b['编号']}无所属超时开腿")
+            刷 = conn.execute(
+                "SELECT 命运 FROM 刷卡点 WHERE 事件编号=?", (b["事件编号"],)
+            ).fetchone()
+            if not 刷 or 刷["命运"] != "已旁路":
+                问题.append(f"超时后出站{b['事件编号']}刷卡命运非已旁路")
+            if conn.execute(
+                "SELECT 1 FROM 行程账 WHERE 出站事件编号=? LIMIT 1", (b["事件编号"],)
+            ).fetchone():
+                问题.append(f"超时后出站{b['事件编号']}竟已成对")
+
         通过 = 1 if not 问题 else 0
         说明 = "行程账与刷卡点互证通过" if 通过 else "；".join(问题)[:800]
         conn.execute(
@@ -57,6 +104,8 @@ def 跑贯验() -> dict:
             "行程数": len(行程),
             "开腿数": 开腿数,
             "旁路数": 旁路数,
+            "缺腿超时旁路数": len(超时旁),
+            "超时后出站旁路数": len(追出旁),
             "说明": 说明,
             "问题": 问题,
         }

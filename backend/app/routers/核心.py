@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.db import 夹具目录, 连接
 from app.services import 装载, 贯验, 目录
+from app.modules import 缺腿超时旁路
 
 路由 = APIRouter(prefix="/api")
 
@@ -94,10 +95,38 @@ def 列行程():
 
 
 @路由.get("/旁路匣")
-def 列旁路():
+def 列旁路(原因: str = "", 开腿键: str = ""):
     conn = 连接()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM 旁路匣 ORDER BY 编号 DESC LIMIT 100")]
+        sql = "SELECT * FROM 旁路匣"
+        条件, 参 = [], []
+        if 原因:
+            条件.append("原因=?")
+            参.append(原因)
+        if 开腿键:
+            条件.append("开腿键=?")
+            参.append(开腿键)
+        if 条件:
+            sql += " WHERE " + " AND ".join(条件)
+        sql += " ORDER BY 编号 DESC LIMIT 100"
+        return [dict(r) for r in conn.execute(sql, 参)]
+    finally:
+        conn.close()
+
+
+@路由.get("/缺腿超时/口径")
+def 缺腿超时口径():
+    return 缺腿超时旁路.口径信息()
+
+
+@路由.get("/缺腿超时/查腿")
+def 缺腿超时查腿(开腿键: str = ""):
+    """只读核验：开腿键 / 是否仍在开腿表 / 旁路编号 / valid。"""
+    if not 开腿键.strip():
+        raise HTTPException(400, "开腿键必填")
+    conn = 连接()
+    try:
+        return 缺腿超时旁路.查腿(conn, 开腿键)
     finally:
         conn.close()
 
